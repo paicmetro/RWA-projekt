@@ -1,11 +1,11 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import Navbar from "./components/Navbar.jsx";
+import { Toaster } from "sonner";
 
+import Navbar from "./components/Navbar.jsx";
 import Home from "./pages/Home.jsx";
 import RecipeDetails from "./pages/RecipeDetails.jsx";
 import AddRecipe from "./pages/AddRecipe.jsx";
 import Profile from "./pages/Profile.jsx";
-
 
 export default function App() {
   return (
@@ -18,11 +18,11 @@ export default function App() {
           <Route path="/recipes/:id" element={<RecipeDetails />} />
           <Route path="/add" element={<AddRecipe />} />
           <Route path="/me" element={<Profile />} />
-
-          {/* fallback za krive rute */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      <Toaster richColors position="top-right" />
     </div>
   );
 }
