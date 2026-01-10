@@ -9,8 +9,11 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Eye,
   ImagePlus,
+  Leaf,
+  ListChecks,
   Plus,
   RotateCcw,
   Save,
@@ -19,16 +22,7 @@ import {
   X,
 } from "lucide-react";
 
-const TAG_SUGGESTIONS = [
-  "Pasta",
-  "Dinner",
-  "Salad",
-  "Healthy",
-  "Breakfast",
-  "Sweet",
-  "Quick",
-  "Vegetarian",
-];
+const TAG_SUGGESTIONS = ["Pasta", "Dinner", "Salad", "Healthy", "Breakfast", "Sweet", "Quick", "Vegetarian"];
 
 function cleanTag(s) {
   return String(s || "")
@@ -86,7 +80,7 @@ export default function AddRecipe() {
   // Embla (Preview carousel)
   const previewImgs = useMemo(() => images.map((x) => x.dataUrl), [images]);
   const canScroll = previewImgs.length > 1;
-  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true });
+  const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" });
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
@@ -96,6 +90,13 @@ export default function AddRecipe() {
     emblaApi.on("select", onSelect);
     return () => emblaApi.off("select", onSelect);
   }, [emblaApi]);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    // kad se modal otvori, embla ponekad treba reInit jer je bio hidden
+    const t = setTimeout(() => emblaApi?.reInit?.(), 0);
+    return () => clearTimeout(t);
+  }, [previewOpen, emblaApi]);
 
   function scrollPrev() {
     emblaApi?.scrollPrev();
@@ -166,7 +167,6 @@ export default function AddRecipe() {
   async function addFiles(files) {
     if (!files?.length) return;
 
-    // primjer ograničenja (po želji)
     const MAX = 10;
     const remaining = Math.max(0, MAX - images.length);
     const slice = files.slice(0, remaining);
@@ -181,8 +181,8 @@ export default function AddRecipe() {
       );
       setImages((prev) => [...prev, ...mapped]);
     } catch {
-      setError("Ne mogu učitati sliku. Probaj s drugom slikom.");
-      toast.error("Ne mogu učitati sliku.");
+      setError("Could not read the image. Try another file.");
+      toast.error("Could not read the image.");
     }
   }
 
@@ -190,7 +190,6 @@ export default function AddRecipe() {
     setImages((prev) => prev.filter((x) => x.id !== id));
   }
 
-  // Dropzone
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { "image/*": [] },
     multiple: true,
@@ -213,7 +212,7 @@ export default function AddRecipe() {
     setError("");
     setSavedMsg("");
     setPreviewOpen(false);
-    toast.message("Forma resetirana.");
+    toast.message("Form reset.");
   }
 
   function onSubmit(e) {
@@ -222,10 +221,9 @@ export default function AddRecipe() {
     setSavedMsg("");
 
     if (!canSave) {
-      const msg =
-        "Popuni obavezna polja: naslov, opis, vrijeme, barem 1 sastojak i 1 korak.";
+      const msg = "Fill required fields: title, description, prep time, at least 1 ingredient and 1 step.";
       setError(msg);
-      toast.error("Nedostaju obavezna polja.");
+      toast.error("Missing required fields.");
       return;
     }
 
@@ -248,68 +246,92 @@ export default function AddRecipe() {
     const next = Array.isArray(existing) ? [recipe, ...existing] : [recipe];
     localStorage.setItem(KEY, JSON.stringify(next));
 
-    const okMsg = "Recept je spremljen lokalno (mock). Kasnije se spaja na backend.";
+    const okMsg = "Saved locally (mock). Later: connect to backend.";
     setSavedMsg(okMsg);
-    toast.success("Spremljeno (mock).");
+    toast.success("Saved (mock).");
   }
 
-  const checklist = [
-    { label: "Title (min 2)", ok: title.trim().length >= 2 },
-    { label: "Description (min 5)", ok: description.trim().length >= 5 },
-    { label: "Prep time", ok: Number(prepTime) > 0 },
-    { label: "At least 1 tag", ok: tags.length >= 1 },
-    { label: "At least 1 ingredient", ok: ingredients.length >= 1 },
-    { label: "At least 1 step", ok: steps.length >= 1 },
-  ];
+  // ===== Design tokens (same vibe as RecipeDetails) =====
+  const card =
+    "relative overflow-hidden rounded-2xl border border-white/40 bg-white/90 shadow-sm backdrop-blur-md";
+  const cardPad = "p-6";
+  const accentStrip = "absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-amber-500/70 via-rose-500/60 to-emerald-500/70";
+
+  const label = "text-sm font-semibold text-slate-800";
+  const input =
+    "mt-1 w-full rounded-xl border border-white/60 bg-white/100 px-4 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-rose-500/25 focus-visible:ring-offset-2 focus-visible:ring-offset-white/60";
+  const softBtn =
+    "inline-flex items-center justify-center gap-2 rounded-xl border border-white/60 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-white/85 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white/60";
+  const primaryBtn = (enabled) =>
+    cx(
+      "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white/60",
+      enabled
+        ? "bg-gradient-to-r from-amber-600 to-rose-600 hover:-translate-y-0.5 hover:shadow-md"
+        : "cursor-not-allowed bg-slate-400"
+    );
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      className="space-y-6"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22 }}
+    >
       {/* Header */}
-      <motion.div
-        className="rounded-2xl border bg-white p-6 shadow-sm"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <section className={cx(card, cardPad)}>
+        <div className={accentStrip} />
+
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold">Add recipe</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Dodaj naslov, tagove, sastojke, korake i slike. Sve se trenutno sprema lokalno.
+            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Add recipe</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Create a recipe with tags, ingredients, steps and photos. Saved locally for now.
             </p>
 
-            <div className="mt-4">
+            <div className="mt-4 max-w-md">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-gray-600">Progress</p>
-                <p className="text-xs font-semibold text-gray-800">{progress}%</p>
+                <p className="text-xs font-semibold text-slate-600">Progress</p>
+                <p className="text-xs font-extrabold text-slate-800">{progress}%</p>
               </div>
-              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-900/10">
                 <div
-                  className="h-full rounded-full bg-black transition-all"
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-600 via-amber-500 to-rose-600 transition-all"
                   style={{ width: `${progress}%` }}
                 />
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold text-slate-600">
+                <span className={cx("rounded-full px-3 py-1", title.trim().length >= 2 ? "bg-emerald-500/10 text-emerald-800" : "bg-slate-900/5")}>
+                  Title
+                </span>
+                <span className={cx("rounded-full px-3 py-1", description.trim().length >= 5 ? "bg-emerald-500/10 text-emerald-800" : "bg-slate-900/5")}>
+                  Description
+                </span>
+                <span className={cx("rounded-full px-3 py-1", Number(prepTime) > 0 ? "bg-emerald-500/10 text-emerald-800" : "bg-slate-900/5")}>
+                  Time
+                </span>
+                <span className={cx("rounded-full px-3 py-1", tags.length >= 1 ? "bg-emerald-500/10 text-emerald-800" : "bg-slate-900/5")}>
+                  Tags
+                </span>
+                <span className={cx("rounded-full px-3 py-1", ingredients.length >= 1 ? "bg-emerald-500/10 text-emerald-800" : "bg-slate-900/5")}>
+                  Ingredients
+                </span>
+                <span className={cx("rounded-full px-3 py-1", steps.length >= 1 ? "bg-emerald-500/10 text-emerald-800" : "bg-slate-900/5")}>
+                  Steps
+                </span>
+                <span className={cx("rounded-full px-3 py-1", images.length >= 1 ? "bg-emerald-500/10 text-emerald-800" : "bg-slate-900/5")}>
+                  Photos
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={resetForm}
-              className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
-            >
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={resetForm} className={softBtn}>
               <RotateCcw className="h-4 w-4" />
               Reset
             </button>
-            <button
-              type="submit"
-              form="add-recipe-form"
-              disabled={!canSave}
-              className={cx(
-                "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition",
-                canSave ? "bg-black hover:opacity-90" : "cursor-not-allowed bg-gray-400"
-              )}
-            >
+            <button type="submit" form="add-recipe-form" disabled={!canSave} className={primaryBtn(canSave)}>
               <Save className="h-4 w-4" />
               Save (mock)
             </button>
@@ -317,41 +339,47 @@ export default function AddRecipe() {
         </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
+          <div className="mt-4 rounded-xl border border-rose-200/60 bg-rose-50/80 p-3 text-sm font-semibold text-rose-700">
             {error}
           </div>
         )}
         {savedMsg && (
-          <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-700">
+          <div className="mt-4 rounded-xl border border-emerald-200/60 bg-emerald-50/80 p-3 text-sm font-semibold text-emerald-800">
             {savedMsg}
           </div>
         )}
-      </motion.div>
+      </section>
 
       <form id="add-recipe-form" onSubmit={onSubmit} className="grid gap-6 lg:grid-cols-12">
         {/* Left */}
         <div className="space-y-4 lg:col-span-8">
-          {/* Basic */}
+          {/* Basic info */}
           <Disclosure defaultOpen>
             {({ open }) => (
-              <section className="rounded-2xl border bg-white shadow-sm">
-                <Disclosure.Button className="flex w-full items-center justify-between gap-3 p-6 text-left">
-                  <div>
-                    <p className="text-base font-semibold">Basic info</p>
-                    <p className="mt-1 text-sm text-gray-600">Naslov, opis i vrijeme pripreme.</p>
+              <section className={card}>
+                <div className={accentStrip} />
+                <Disclosure.Button className="relative flex w-full items-center justify-between gap-3 p-6 text-left">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900/5">
+                      <Clock className="h-5 w-5 text-slate-700" />
+                    </span>
+                    <div>
+                      <p className="text-base font-extrabold text-slate-900">Basic info</p>
+                      <p className="mt-1 text-sm text-slate-600">Title, short description and prep time.</p>
+                    </div>
                   </div>
-                  <ChevronDown className={cx("h-5 w-5 transition", open && "rotate-180")} />
+                  <ChevronDown className={cx("h-5 w-5 text-slate-700 transition", open && "rotate-180")} />
                 </Disclosure.Button>
 
                 <Disclosure.Panel className="px-6 pb-6">
                   <div className="grid gap-4">
                     <div>
-                      <label className="text-sm font-medium" htmlFor="title">
+                      <label className={label} htmlFor="title">
                         Title
                       </label>
                       <input
                         id="title"
-                        className="mt-1 w-full rounded-lg border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                        className={input}
                         placeholder="e.g. Spaghetti Bolognese"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
@@ -359,12 +387,12 @@ export default function AddRecipe() {
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium" htmlFor="desc">
+                      <label className={label} htmlFor="desc">
                         Description
                       </label>
                       <textarea
                         id="desc"
-                        className="mt-1 w-full rounded-lg border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                        className={input}
                         rows={4}
                         placeholder="Short description..."
                         value={description}
@@ -373,14 +401,14 @@ export default function AddRecipe() {
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium" htmlFor="prep">
+                      <label className={label} htmlFor="prep">
                         Prep time (minutes)
                       </label>
                       <input
                         id="prep"
                         type="number"
                         min={1}
-                        className="mt-1 w-full rounded-lg border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                        className={input}
                         placeholder="e.g. 30"
                         value={prepTime}
                         onChange={(e) => setPrepTime(e.target.value)}
@@ -395,31 +423,29 @@ export default function AddRecipe() {
           {/* Tags */}
           <Disclosure defaultOpen>
             {({ open }) => (
-              <section className="rounded-2xl border bg-white shadow-sm">
+              <section className={card}>
                 <Disclosure.Button className="flex w-full items-center justify-between gap-3 p-6 text-left">
                   <div className="flex items-start gap-3">
-                    <span className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                      <Tag className="h-4 w-4" />
+                    <span className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900/5">
+                      <Tag className="h-5 w-5 text-slate-700" />
                     </span>
                     <div>
-                      <p className="text-base font-semibold">Tags</p>
-                      <p className="mt-1 text-sm text-gray-600">
-                        Tagovi kao na Home karticama (npr. Pasta, Dinner).
-                      </p>
+                      <p className="text-base font-extrabold text-slate-900">Tags</p>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-3">
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                    <span className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-extrabold text-slate-700">
                       {tags.length}
                     </span>
-                    <ChevronDown className={cx("h-5 w-5 transition", open && "rotate-180")} />
+                    <ChevronDown className={cx("h-5 w-5 text-slate-700 transition", open && "rotate-180")} />
                   </div>
                 </Disclosure.Button>
 
                 <Disclosure.Panel className="px-6 pb-6">
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <input
-                      className="w-full rounded-lg border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                      className={cx(input, "mt-0")}
                       placeholder="Type a tag and press Enter..."
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
@@ -430,13 +456,9 @@ export default function AddRecipe() {
                         }
                       }}
                     />
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
-                      onClick={() => addTag(tagInput)}
-                    >
+                    <button type="button" className={softBtn} onClick={() => addTag(tagInput)}>
                       <Plus className="h-4 w-4" />
-                      Add tag
+                      Add
                     </button>
                   </div>
 
@@ -446,25 +468,26 @@ export default function AddRecipe() {
                         key={t}
                         type="button"
                         onClick={() => addTag(t)}
-                        className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-200"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-white/60 bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-white/80"
                       >
+                        <Leaf className="h-3.5 w-3.5 text-emerald-600" />
                         {t}
                       </button>
                     ))}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {tags.length === 0 && <span className="text-sm text-gray-500">No tags yet.</span>}
+                    {tags.length === 0 && <span className="text-sm text-slate-600">No tags yet.</span>}
                     {tags.map((t) => (
                       <span
                         key={t}
-                        className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+                        className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-gradient-to-r from-emerald-50/80 to-amber-50/80 px-3 py-1 text-xs font-extrabold text-slate-700 shadow-[0_1px_0_rgba(0,0,0,0.04)]"
                       >
                         {t}
                         <button
                           type="button"
                           onClick={() => removeTag(t)}
-                          className="rounded-full bg-blue-200 px-2 py-0.5 text-xs font-bold transition hover:opacity-90"
+                          className="rounded-full bg-slate-900/10 px-2 py-0.5 text-xs font-black text-slate-700 transition hover:bg-slate-900/15"
                           aria-label={`Remove tag ${t}`}
                           title="Remove"
                         >
@@ -481,24 +504,30 @@ export default function AddRecipe() {
           {/* Ingredients */}
           <Disclosure defaultOpen>
             {({ open }) => (
-              <section className="rounded-2xl border bg-white shadow-sm">
+              <section className={card}>
                 <Disclosure.Button className="flex w-full items-center justify-between gap-3 p-6 text-left">
-                  <div>
-                    <p className="text-base font-semibold">Ingredients</p>
-                    <p className="mt-1 text-sm text-gray-600">Dodaj sastojke jedan po jedan.</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                      {ingredients.length}
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
+                      <Leaf className="h-5 w-5 text-emerald-700" />
                     </span>
-                    <ChevronDown className={cx("h-5 w-5 transition", open && "rotate-180")} />
+                    <div>
+                      <p className="text-base font-extrabold text-slate-900">Ingredients</p>
+                      <p className="mt-1 text-sm text-slate-600">Add items one by one (Enter to add).</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-extrabold text-emerald-800">
+                      {ingredients.length} items
+                    </span>
+                    <ChevronDown className={cx("h-5 w-5 text-slate-700 transition", open && "rotate-180")} />
                   </div>
                 </Disclosure.Button>
 
                 <Disclosure.Panel className="px-6 pb-6">
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <input
-                      className="w-full rounded-lg border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                      className={cx(input, "mt-0")}
                       placeholder="e.g. 200g pasta"
                       value={ingredientInput}
                       onChange={(e) => setIngredientInput(e.target.value)}
@@ -511,7 +540,10 @@ export default function AddRecipe() {
                     />
                     <button
                       type="button"
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                      className={cx(
+                        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-extrabold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white/60",
+                        "bg-gradient-to-r from-emerald-600 to-emerald-500"
+                      )}
                       onClick={() => addIngredient(ingredientInput)}
                     >
                       <Plus className="h-4 w-4" />
@@ -521,7 +553,7 @@ export default function AddRecipe() {
 
                   <div className="mt-4 space-y-2">
                     {ingredients.length === 0 && (
-                      <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-600">
+                      <div className="rounded-xl border border-white/60 bg-white/80 p-4 text-sm text-slate-600">
                         No ingredients yet.
                       </div>
                     )}
@@ -529,17 +561,15 @@ export default function AddRecipe() {
                     {ingredients.map((ing, idx) => (
                       <div
                         key={`${ing}-${idx}`}
-                        className="flex items-center justify-between gap-3 rounded-lg border p-3 transition hover:bg-gray-50"
+                        className="flex items-start justify-between gap-3 rounded-xl border border-white/60 bg-white/60 p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
                       >
-                        <p className="text-sm text-gray-800">
-                          <span className="mr-2 text-xs font-semibold text-gray-500">{idx + 1}.</span>
+                        <p className="text-sm text-slate-800">
+                          <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600/15 text-xs font-black text-emerald-800">
+                            {idx + 1}
+                          </span>
                           {ing}
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => removeIngredient(idx)}
-                          className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm font-medium transition hover:bg-gray-50"
-                        >
+                        <button type="button" onClick={() => removeIngredient(idx)} className={cx(softBtn, "px-3 py-2")}>
                           <Trash2 className="h-4 w-4" />
                           Remove
                         </button>
@@ -554,24 +584,30 @@ export default function AddRecipe() {
           {/* Steps */}
           <Disclosure defaultOpen>
             {({ open }) => (
-              <section className="rounded-2xl border bg-white shadow-sm">
+              <section className={card}>
                 <Disclosure.Button className="flex w-full items-center justify-between gap-3 p-6 text-left">
-                  <div>
-                    <p className="text-base font-semibold">Steps</p>
-                    <p className="mt-1 text-sm text-gray-600">Dodaj korake pripreme.</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                      {steps.length}
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
+                      <ListChecks className="h-5 w-5 text-amber-800" />
                     </span>
-                    <ChevronDown className={cx("h-5 w-5 transition", open && "rotate-180")} />
+                    <div>
+                      <p className="text-base font-extrabold text-slate-900">Steps</p>
+                      <p className="mt-1 text-sm text-slate-600">Short instructions, added one by one.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-extrabold text-amber-900">
+                      {steps.length} steps
+                    </span>
+                    <ChevronDown className={cx("h-5 w-5 text-slate-700 transition", open && "rotate-180")} />
                   </div>
                 </Disclosure.Button>
 
                 <Disclosure.Panel className="px-6 pb-6">
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <input
-                      className="w-full rounded-lg border px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                      className={cx(input, "mt-0")}
                       placeholder="e.g. Boil water and cook pasta..."
                       value={stepInput}
                       onChange={(e) => setStepInput(e.target.value)}
@@ -582,11 +618,7 @@ export default function AddRecipe() {
                         }
                       }}
                     />
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-                      onClick={() => addStep(stepInput)}
-                    >
+                    <button type="button" className={primaryBtn(true)} onClick={() => addStep(stepInput)}>
                       <Plus className="h-4 w-4" />
                       Add
                     </button>
@@ -594,7 +626,7 @@ export default function AddRecipe() {
 
                   <div className="mt-4 space-y-2">
                     {steps.length === 0 && (
-                      <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-600">
+                      <div className="rounded-xl border border-white/60 bg-white/80 p-4 text-sm text-slate-600">
                         No steps yet.
                       </div>
                     )}
@@ -602,17 +634,16 @@ export default function AddRecipe() {
                     {steps.map((s, idx) => (
                       <div
                         key={`${s}-${idx}`}
-                        className="flex items-start justify-between gap-3 rounded-lg border p-3 transition hover:bg-gray-50"
+                        className="flex items-start justify-between gap-3 rounded-xl border border-white/60 bg-white/60 p-4 transition hover:-translate-y-0.5 hover:shadow-sm"
                       >
-                        <p className="text-sm text-gray-800">
-                          <span className="mr-2 text-xs font-semibold text-gray-500">{idx + 1}.</span>
-                          {s}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => removeStep(idx)}
-                          className="shrink-0 inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm font-medium transition hover:bg-gray-50"
-                        >
+                        <div className="flex gap-3">
+                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-600 to-rose-600 text-xs font-black text-white shadow-sm">
+                            {idx + 1}
+                          </span>
+                          <p className="text-sm text-slate-800">{s}</p>
+                        </div>
+
+                        <button type="button" onClick={() => removeStep(idx)} className={cx(softBtn, "shrink-0 px-3 py-2")}>
                           <Trash2 className="h-4 w-4" />
                           Remove
                         </button>
@@ -629,17 +660,19 @@ export default function AddRecipe() {
         <aside className="space-y-6 lg:col-span-4">
           {/* Photos */}
           <motion.section
-            className="rounded-2xl border bg-white p-6 shadow-sm lg:sticky lg:top-6"
+            className={cx(card, "lg:sticky lg:top-6", cardPad)}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: 0.05 }}
+            transition={{ duration: 0.22, delay: 0.05 }}
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className={accentStrip} />
+
+            <div className="relative flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-base font-semibold">Photos</h3>
-                <p className="mt-1 text-sm text-gray-600">Drag & drop ili klikni za dodavanje.</p>
+                <h3 className="text-base font-extrabold text-slate-900">Photos</h3>
+                <p className="mt-1 text-sm text-slate-600">Drag & drop or click to add.</p>
               </div>
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+              <span className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-extrabold text-slate-700">
                 {images.length}
               </span>
             </div>
@@ -647,29 +680,27 @@ export default function AddRecipe() {
             <div
               {...getRootProps()}
               className={cx(
-                "mt-4 rounded-2xl border p-4 transition",
-                isDragActive ? "bg-gray-50 ring-2 ring-black/10" : "bg-white hover:bg-gray-50"
+                "relative mt-4 rounded-2xl border border-white/60 p-4 transition",
+                isDragActive ? "bg-white/75 ring-2 ring-rose-500/20" : "bg-white/60 hover:bg-white/75"
               )}
             >
               <input {...getInputProps()} />
               <div className="flex items-center gap-3">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50">
-                  <ImagePlus className="h-5 w-5" />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900/5">
+                  <ImagePlus className="h-5 w-5 text-slate-700" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold">
-                    {isDragActive ? "Pusti slike ovdje..." : "Dodaj fotografije"}
+                  <p className="text-sm font-extrabold text-slate-800">
+                    {isDragActive ? "Drop images here..." : "Add photos"}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-600">
-                    Podržano: image/* · preporuka: 1–5 slika
-                  </p>
+                  <p className="mt-0.5 text-xs text-slate-600">Recommended: 1–5 photos</p>
                 </div>
               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               {images.map((img) => (
-                <div key={img.id} className="group relative overflow-hidden rounded-xl border">
+                <div key={img.id} className="group relative overflow-hidden rounded-xl border border-white/60 bg-white/60">
                   <img
                     src={img.dataUrl}
                     alt={img.name}
@@ -678,7 +709,7 @@ export default function AddRecipe() {
                   <button
                     type="button"
                     onClick={() => removeImage(img.id)}
-                    className="absolute right-2 top-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-semibold transition hover:bg-white"
+                    className="absolute right-2 top-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-extrabold text-slate-800 shadow-sm transition hover:bg-white"
                     title="Remove image"
                   >
                     Remove
@@ -687,7 +718,7 @@ export default function AddRecipe() {
               ))}
 
               {images.length === 0 && (
-                <div className="col-span-2 rounded-lg border bg-gray-50 p-4 text-sm text-gray-600">
+                <div className="col-span-2 rounded-xl border border-white/60 bg-white/60 p-4 text-sm text-slate-600">
                   No photos yet.
                 </div>
               )}
@@ -697,68 +728,48 @@ export default function AddRecipe() {
             <button
               type="button"
               onClick={() => setPreviewOpen(true)}
-              className="group mt-5 w-full rounded-xl border bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-gray-50 hover:shadow-md hover:ring-2 hover:ring-black/10 focus:outline-none focus:ring-2 focus:ring-black/10"
+              className="mt-5 w-full rounded-xl border border-white/60 bg-white/60 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-white/80 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/25 focus-visible:ring-offset-2 focus-visible:ring-offset-white/60"
               title="Open preview"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                    <Eye className="h-4 w-4" />
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900/5">
+                    <Eye className="h-4 w-4 text-slate-700" />
                   </span>
                   <div>
-                    <p className="text-sm font-semibold">Preview</p>
-                    <p className="mt-0.5 text-xs text-gray-600">Klikni da vidiš “published” izgled.</p>
+                    <p className="text-sm font-extrabold text-slate-900">Preview</p>
                   </div>
                 </div>
 
-                <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-700">
+                <span className="rounded-full bg-slate-900/5 px-2 py-1 text-[11px] font-extrabold text-slate-700">
                   {Number(prepTime) > 0 ? `${Number(prepTime)}m` : "—"}
                 </span>
               </div>
 
               <div className="mt-3 flex items-center gap-2">
-                <div className="h-10 w-10 overflow-hidden rounded-lg border bg-gray-50">
+                <div className="h-10 w-10 overflow-hidden rounded-lg border border-white/60 bg-white/70">
                   {heroImage ? (
                     <img src={heroImage} alt="Preview" className="h-full w-full object-cover" />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[10px] text-gray-500">
+                    <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-slate-500">
                       No photo
                     </div>
                   )}
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold">{title.trim() || "Recipe title"}</p>
-                  <p className="truncate text-[11px] text-gray-600">
-                    {description.trim() || "Short description..."}
-                  </p>
+                  <p className="truncate text-xs font-extrabold text-slate-900">{title.trim() || "Recipe title"}</p>
+                  <p className="truncate text-[11px] text-slate-600">{description.trim() || "Short description..."}</p>
                 </div>
               </div>
             </button>
 
-            {/* Checklist */}
-            <div className="mt-5 rounded-xl border bg-gray-50 p-4">
-              <p className="text-sm font-semibold">Checklist</p>
-              <div className="mt-3 space-y-2">
-                {checklist.map((x) => (
-                  <div key={x.label} className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-gray-700">{x.label}</p>
-                    <span
-                      className={cx(
-                        "inline-flex h-6 w-6 items-center justify-center rounded-full border",
-                        x.ok ? "bg-white" : "bg-gray-100"
-                      )}
-                      title={x.ok ? "OK" : "Missing"}
-                    >
-                      {x.ok ? <Check className="h-4 w-4" /> : null}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-3 text-xs text-gray-600">
-                Tagovi i slike nisu obavezni za save, ali jako poboljšaju UX.
-              </p>
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-xs text-slate-600">Stored locally (mock).</p>
+              <span className="inline-flex items-center gap-2 rounded-full bg-slate-900/5 px-3 py-1 text-xs font-extrabold text-slate-700">
+                <Check className="h-4 w-4" />
+                Ready: {canSave ? "Yes" : "No"}
+              </span>
             </div>
           </motion.section>
         </aside>
@@ -776,7 +787,7 @@ export default function AddRecipe() {
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+            <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm" />
           </Transition.Child>
 
           <div className="fixed inset-0 overflow-y-auto p-4">
@@ -790,22 +801,42 @@ export default function AddRecipe() {
                 leaveFrom="opacity-100 translate-y-0 scale-100"
                 leaveTo="opacity-0 translate-y-2 scale-[0.98]"
               >
-                <Dialog.Panel className="w-full overflow-hidden rounded-2xl border bg-white shadow-xl">
-                  {/* Top */}
+                <Dialog.Panel className="w-full overflow-hidden rounded-2xl border border-white/30 bg-white/80 shadow-xl backdrop-blur-md">
+                  <div className="relative border-b border-white/40 p-5">
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-emerald-500/10" />
+                    <div className="relative flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <Dialog.Title className="text-lg font-extrabold text-slate-900">
+                          Preview
+                        </Dialog.Title>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {title.trim() || "Recipe title"} · {Number(prepTime) > 0 ? `${Number(prepTime)} min` : "— min"}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setPreviewOpen(false)}
+                        className="rounded-xl bg-white/70 p-2 shadow-sm ring-1 ring-black/5 transition hover:bg-white/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/30"
+                        title="Close"
+                        aria-label="Close"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Content */}
                   <div className="grid gap-0 md:grid-cols-5">
                     {/* Carousel */}
                     <div className="relative md:col-span-3">
                       {previewImgs.length > 0 ? (
-                        <div className="relative h-64 overflow-hidden bg-black md:h-full">
+                        <div className="relative h-64 overflow-hidden bg-slate-900 md:h-full">
                           <div ref={emblaRef} className="h-full overflow-hidden">
                             <div className="flex h-full">
                               {previewImgs.map((src, idx) => (
                                 <div key={`${src}-${idx}`} className="min-w-0 flex-[0_0_100%]">
-                                  <img
-                                    src={src}
-                                    alt={`Preview ${idx + 1}`}
-                                    className="h-full w-full object-cover"
-                                  />
+                                  <img src={src} alt={`Preview ${idx + 1}`} className="h-full w-full object-cover" />
                                 </div>
                               ))}
                             </div>
@@ -816,7 +847,7 @@ export default function AddRecipe() {
                               <button
                                 type="button"
                                 onClick={scrollPrev}
-                                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow transition hover:bg-white"
+                                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-sm transition hover:bg-white hover:shadow"
                                 title="Previous"
                               >
                                 <ChevronLeft className="h-5 w-5" />
@@ -824,13 +855,13 @@ export default function AddRecipe() {
                               <button
                                 type="button"
                                 onClick={scrollNext}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow transition hover:bg-white"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-sm transition hover:bg-white hover:shadow"
                                 title="Next"
                               >
                                 <ChevronRight className="h-5 w-5" />
                               </button>
 
-                              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-black/40 px-3 py-2">
+                              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm">
                                 {previewImgs.map((_, idx) => (
                                   <button
                                     key={idx}
@@ -848,7 +879,7 @@ export default function AddRecipe() {
                           )}
                         </div>
                       ) : (
-                        <div className="flex h-64 items-center justify-center bg-gray-50 text-sm text-gray-600 md:h-full">
+                        <div className="flex h-64 items-center justify-center bg-white/60 text-sm text-slate-600 md:h-full">
                           No photo yet
                         </div>
                       )}
@@ -857,43 +888,22 @@ export default function AddRecipe() {
                     {/* Info */}
                     <div className="md:col-span-2">
                       <div className="p-6">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <Dialog.Title className="truncate text-lg font-bold">
-                              {title.trim() || "Recipe title"}
-                            </Dialog.Title>
-                            <p className="mt-1 text-sm text-gray-600">
-                              {description.trim() || "Short description..."}
-                            </p>
-                            <p className="mt-2 text-xs text-gray-500">By Demo User</p>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => setPreviewOpen(false)}
-                            className="rounded-lg border bg-white p-2 transition hover:bg-gray-50"
-                            title="Close"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
+                        <p className="text-sm font-semibold text-slate-800">Description</p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {description.trim() || "Short description..."}
+                        </p>
+                        <p className="mt-2 text-xs text-slate-500">By Demo User</p>
 
                         <div className="mt-4 flex flex-wrap gap-2">
                           {(tags.length ? tags : ["Tag"]).slice(0, 8).map((t) => (
                             <span
                               key={t}
-                              className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+                              className="inline-flex items-center gap-1.5 rounded-full border border-white/60 bg-gradient-to-r from-emerald-50/80 to-amber-50/80 px-3 py-1 text-xs font-extrabold text-slate-700"
                             >
+                              <Leaf className="h-3.5 w-3.5 text-emerald-600" />
                               {t}
                             </span>
                           ))}
-                        </div>
-
-                        <div className="mt-4 flex items-center justify-between">
-                          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                            {Number(prepTime) > 0 ? `${Number(prepTime)} min` : "— min"}
-                          </span>
-                          <p className="text-xs text-gray-500">ESC / klik van zatvara</p>
                         </div>
 
                         {/* Thumbs */}
@@ -906,8 +916,8 @@ export default function AddRecipe() {
                                   type="button"
                                   onClick={() => scrollTo(idx)}
                                   className={cx(
-                                    "shrink-0 overflow-hidden rounded-lg border transition",
-                                    idx === selectedIndex ? "ring-2 ring-black/15" : "hover:shadow-sm"
+                                    "shrink-0 overflow-hidden rounded-xl border border-white/60 transition",
+                                    idx === selectedIndex ? "ring-2 ring-amber-500/25 ring-inset shadow-sm" : "hover:shadow-sm"
                                   )}
                                   title={`Go to image ${idx + 1}`}
                                 >
@@ -916,7 +926,7 @@ export default function AddRecipe() {
                               ))}
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-600">Dodaj slike da vidiš thumbnails.</p>
+                            <p className="text-sm text-slate-600">Add images to see thumbnails.</p>
                           )}
                         </div>
                       </div>
@@ -924,46 +934,46 @@ export default function AddRecipe() {
                   </div>
 
                   {/* Details */}
-                  <div className="grid gap-4 border-t bg-white p-6 md:grid-cols-2">
-                    <div className="rounded-xl border bg-gray-50 p-4">
-                      <p className="text-sm font-semibold">Ingredients</p>
-                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
+                  <div className="grid gap-4 border-t border-white/40 bg-white/60 p-6 md:grid-cols-2">
+                    <div className="rounded-xl border border-white/60 bg-white/60 p-4">
+                      <p className="text-sm font-extrabold text-slate-900">Ingredients</p>
+                      <ul className="mt-3 space-y-2 text-sm text-slate-700">
                         {(ingredients.length ? ingredients.slice(0, 8) : ["(add ingredients)"]).map((ing, idx) => (
-                          <li key={`${ing}-${idx}`}>{ing}</li>
+                          <li key={`${ing}-${idx}`} className="flex items-start gap-2">
+                            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600/70" />
+                            <span className="leading-relaxed">{ing}</span>
+                          </li>
                         ))}
                       </ul>
                       {ingredients.length > 8 && (
-                        <p className="mt-2 text-xs text-gray-500">+{ingredients.length - 8} more...</p>
+                        <p className="mt-2 text-xs text-slate-500">+{ingredients.length - 8} more...</p>
                       )}
                     </div>
 
-                    <div className="rounded-xl border bg-gray-50 p-4">
-                      <p className="text-sm font-semibold">Steps</p>
-                      <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-700">
+                    <div className="rounded-xl border border-white/60 bg-white/60 p-4">
+                      <p className="text-sm font-extrabold text-slate-900">Steps</p>
+                      <ol className="mt-3 space-y-2 text-sm text-slate-700">
                         {(steps.length ? steps.slice(0, 6) : ["(add steps)"]).map((s, idx) => (
-                          <li key={`${s}-${idx}`}>{s}</li>
+                          <li key={`${s}-${idx}`} className="flex gap-3">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-600 to-rose-600 text-xs font-black text-white shadow-sm">
+                              {idx + 1}
+                            </span>
+                            <span className="leading-relaxed">{s}</span>
+                          </li>
                         ))}
                       </ol>
                       {steps.length > 6 && (
-                        <p className="mt-2 text-xs text-gray-500">+{steps.length - 6} more...</p>
+                        <p className="mt-2 text-xs text-slate-500">+{steps.length - 6} more...</p>
                       )}
                     </div>
                   </div>
 
                   {/* Footer */}
-                  <div className="flex items-center justify-end gap-2 border-t bg-white p-4">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewOpen(false)}
-                      className="rounded-lg border bg-white px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
-                    >
+                  <div className="flex items-center justify-end gap-2 border-t border-white/40 bg-white/60 p-4">
+                    <button type="button" onClick={() => setPreviewOpen(false)} className={softBtn}>
                       Close
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewOpen(false)}
-                      className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-                    >
+                    <button type="button" onClick={() => setPreviewOpen(false)} className={primaryBtn(true)}>
                       <Check className="h-4 w-4" />
                       Ok
                     </button>
@@ -974,6 +984,6 @@ export default function AddRecipe() {
           </div>
         </Dialog>
       </Transition>
-    </div>
+    </motion.div>
   );
 }
